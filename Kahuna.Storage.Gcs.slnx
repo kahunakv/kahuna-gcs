@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Kahuna.Storage.Gcs.Tests/Kahuna.Storage.Gcs.Tests.csproj" />
+  <Project Path="Kahuna.Storage.Gcs/Kahuna.Storage.Gcs.csproj" />
+</Solution>

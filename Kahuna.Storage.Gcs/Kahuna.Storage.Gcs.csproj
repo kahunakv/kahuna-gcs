@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Kahuna.Storage.Gcs</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Kahuna.Storage.Gcs</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Andres Gutierrez</Authors>
+    <Company>Andres Gutierrez</Company>
+    <Description>Google Cloud Storage backup target for Kahuna: stores point-in-time-recovery manifests and backup artifacts in a GCS bucket.</Description>
+    <PackageDescription>Google Cloud Storage backup target for Kahuna: stores point-in-time-recovery manifests and backup artifacts in a GCS bucket.</PackageDescription>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/kahunakv/kahuna-gcs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kahunakv/kahuna-gcs</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>kahuna;backup;pitr;google cloud storage;gcs;object storage</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.15.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <!--
+    Kahuna.Core carries the backup storage contracts this package implements. 1.0.7 is the first
+    release that exposes them: earlier versions kept them internal and synchronous.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Kahuna.Core" Version="1.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Kahuna.Storage.Gcs.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

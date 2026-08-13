@@ -1,0 +1,32 @@
+# Local GCS stand-in for the integration suite.
+#
+# What this does and does not prove is worth being precise about. fake-gcs-server speaks the JSON
+# API, so it exercises most of the object protocol this adapter depends on: listing with page
+# tokens, range reads, resumable uploads, and per-object deletes.
+#
+# Two things it does not do, both verified against this image rather than assumed:
+#   - It ignores generation preconditions. A create-if-absent write over an existing object is
+#     accepted and overwrites it, where the real service answers 412. Manifest-collision behaviour
+#     is therefore pinned against a scripted transport instead (see StubTransport).
+#   - It models no access control at all. Credentials, IAM, and bucket policy are unauthenticated
+#     no-ops, so the bucket-hardening checks are switched off in the tests and remain unverified
+#     until the adapter is run against a real bucket.
+services:
+  gcs:
+    image: fsouza/fake-gcs-server:1.55.1
+    command:
+      - -scheme
+      - http
+      - -port
+      - "4443"
+      - -backend
+      - memory
+      - -external-url
+      - http://localhost:4443
+    ports:
+      - "4443:4443"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:4443/storage/v1/b"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
