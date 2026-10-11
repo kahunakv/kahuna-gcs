@@ -1,0 +1,36 @@
+name: Run Tests
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  Kahuna-Gcs-Tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v5
+      - name: Install .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Start GCS emulator
+        # The image and its flags live in docker-compose.yml so local runs and CI use the same server.
+        run: docker compose up -d --wait
+      - name: Restore
+        run: dotnet restore Kahuna.Storage.Gcs.slnx
+      - name: Build
+        run: dotnet build Kahuna.Storage.Gcs.slnx --no-restore -c Release
+      - name: Run Tests
+        # The emulator suite skips itself when no server answers. FailSkips turns those skips into
+        # failures here, so an emulator that never came up cannot pass the build with nothing exercised.
+        run: dotnet test Kahuna.Storage.Gcs.slnx --no-build -c Release -l "console;verbosity=normal" -- xUnit.FailSkips=true
+      - name: Pack
+        run: dotnet pack Kahuna.Storage.Gcs/Kahuna.Storage.Gcs.csproj --no-build -c Release -o artifacts
+      - name: Dump GCS emulator logs
+        if: failure()
+        run: docker compose logs --timestamps
+      - name: Stop GCS emulator
+        if: always()
+        run: docker compose down -v

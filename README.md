@@ -11,7 +11,8 @@ contracts are an extension point, and this is an implementation of them.
 ## Requirements
 
 - .NET 10
-- `Kahuna.Core` 1.0.7 or later — earlier versions do not expose the artifact storage contracts
+- `Kahuna.Core` 1.11.7 or later — the package references it directly. The artifact storage contracts
+  first appeared in 1.0.7; earlier versions do not expose them
 
 ## Installing it in a host
 
@@ -165,6 +166,9 @@ dotnet test
 ```
 
 Without the emulator the suite still runs and the tests that need it are skipped rather than failed.
+CI runs with `dotnet test -- xUnit.FailSkips=true` so that an emulator that never came up fails the
+build instead of passing it with nothing exercised; do the same locally to be sure the emulator tests
+actually ran.
 
 What the emulator does and does not prove is worth being precise about, and each of these was
 checked against the image rather than assumed:

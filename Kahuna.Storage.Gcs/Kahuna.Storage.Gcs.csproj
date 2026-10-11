@@ -27,15 +27,16 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Cloud.Storage.V1" Version="4.15.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
   </ItemGroup>
 
   <!--
     Kahuna.Core carries the backup storage contracts this package implements. 1.0.7 is the first
-    release that exposes them: earlier versions kept them internal and synchronous.
+    release that exposes them: earlier versions kept them internal and synchronous. Tracks the
+    latest Kahuna release; CI builds and tests against whatever version is pinned here.
   -->
   <ItemGroup>
-    <PackageReference Include="Kahuna.Core" Version="1.0.7" />
+    <PackageReference Include="Kahuna.Core" Version="1.11.7" />
   </ItemGroup>
 
   <ItemGroup>
