@@ -11,7 +11,7 @@ contracts are an extension point, and this is an implementation of them.
 ## Requirements
 
 - .NET 10
-- `Kahuna.Core` 1.11.7 or later — the package references it directly. The artifact storage contracts
+- `Kahuna.Core` 1.15.6 or later — the package references it directly. The artifact storage contracts
   first appeared in 1.0.7; earlier versions do not expose them
 
 ## Installing it in a host
