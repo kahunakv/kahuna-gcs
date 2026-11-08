@@ -5,24 +5,12 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-env:
-  # The Kahuna server that the server tests load the bundle into. It must have a Kahuna.Core version
-  # equal to or higher than the one this package references; a lower one refuses the bundle, and the
-  # tests fail with a message that names both versions. Pin a commit or a tag here to stop a change on
-  # the Kahuna main branch from failing this build.
-  KAHUNA_SERVER_REF: main
 jobs:
   Kahuna-Gcs-Tests:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v5
-      - name: Check out the Kahuna server
-        uses: actions/checkout@v5
-        with:
-          repository: kahunakv/kahuna
-          ref: ${{ env.KAHUNA_SERVER_REF }}
-          path: kahuna-server-src
       - name: Install .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -34,8 +22,17 @@ jobs:
         run: dotnet restore Kahuna.Storage.Gcs.slnx
       - name: Build
         run: dotnet build Kahuna.Storage.Gcs.slnx --no-restore -c Release
-      - name: Publish the Kahuna server
-        run: dotnet publish kahuna-server-src/Kahuna.Server/Kahuna.Server.csproj -c Release -o "$RUNNER_TEMP/kahuna-server"
+      - name: Install the Kahuna server
+        # The server tests load the bundle into the released server tool, at the Kahuna.Core version this
+        # package references: the oldest server the package supports. A server with a lower version
+        # refuses the bundle, so this is the version that must keep working.
+        run: |
+          version="$(sed -n 's|.*Include="Kahuna.Core" Version="\([^"]*\)".*|\1|p' Kahuna.Storage.Gcs/Kahuna.Storage.Gcs.csproj)"
+          test -n "$version"
+          dotnet tool install Kahuna.Server --version "$version" --tool-path "$RUNNER_TEMP/kahuna-server"
+          server="$(find "$RUNNER_TEMP/kahuna-server/.store" -name Kahuna.Server.dll -path '*/tools/*' | head -n 1)"
+          test -n "$server"
+          echo "KAHUNA_SERVER_DLL=$server" >> "$GITHUB_ENV"
       - name: Publish the extension bundle
         run: scripts/publish-bundle.sh -o "$RUNNER_TEMP/gcs-bundle"
       - name: Pack
@@ -48,7 +45,6 @@ jobs:
         # without a published server and bundle. FailSkips turns those skips into failures here, so a
         # missing emulator, server or bundle cannot pass the build with nothing exercised.
         env:
-          KAHUNA_SERVER_DLL: ${{ runner.temp }}/kahuna-server/Kahuna.Server.dll
           KAHUNA_GCS_BUNDLE_DLL: ${{ runner.temp }}/gcs-package/tools/kahuna-extension/Kahuna.Storage.Gcs.dll
         run: dotnet test Kahuna.Storage.Gcs.slnx --no-build -c Release -l "console;verbosity=normal" -- xUnit.FailSkips=true
       - name: Dump GCS emulator logs

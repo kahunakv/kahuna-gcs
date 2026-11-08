@@ -43,17 +43,17 @@ The tests need a published server and a bundle. Without them, they are skipped. 
 the output of `scripts/publish-bundle.sh`, which is the same set of files as the package folder:
 
 ```sh
-dotnet publish <kahuna>/Kahuna.Server/Kahuna.Server.csproj -c Release -o /tmp/kahuna-server
+dotnet tool install Kahuna.Server --version <Kahuna.Core version> --tool-path /tmp/kahuna-server
 scripts/publish-bundle.sh -o /tmp/gcs-bundle
 
-export KAHUNA_SERVER_DLL=/tmp/kahuna-server/Kahuna.Server.dll
+export KAHUNA_SERVER_DLL="$(find /tmp/kahuna-server/.store -name Kahuna.Server.dll -path '*/tools/*')"
 export KAHUNA_GCS_BUNDLE_DLL=/tmp/gcs-bundle/Kahuna.Storage.Gcs.dll
 dotnet test --filter "FullyQualifiedName~TestServerEndToEnd"
 ```
 
-The server must have a `Kahuna.Core` version that is equal to or higher than the version that this
-package references. CI builds the server from the Kahuna repository at the ref in
-`KAHUNA_SERVER_REF`, in `.github/workflows/run-tests.yml`.
+The server is the `Kahuna.Server` tool from NuGet. Its version must be equal to or higher than the
+`Kahuna.Core` version that this package references, or the server refuses the bundle. CI installs the
+tool at exactly that version, the oldest server that the package supports.
 
 ## What the emulator supports
 
