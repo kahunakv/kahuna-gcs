@@ -12,8 +12,9 @@ New to the terms on these pages? Read the
 ## Requirements
 
 - .NET 10.
-- `Kahuna.Core` 1.16.2 or later. Earlier versions cannot load a backup target from an extension
-  assembly.
+- `Kahuna.Core` 1.16.3 or later. Versions before 1.16.2 cannot load a backup target from an
+  extension assembly. A 1.16.2 server refuses this package, because the package is built against
+  1.16.3.
 
 ## Quick start
 

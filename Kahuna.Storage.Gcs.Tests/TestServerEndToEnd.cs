@@ -195,6 +195,10 @@ public class TestServerEndToEnd(GcsEmulatorFixture fixture) : IAsyncLifetime
         }
 
         Assert.True(node.HasExited, $"The node still runs {StartTimeout} after its start.\n{node.Output}");
+
+        // A supervisor sees only the exit code: systemd restarts a unit with Restart=on-failure only on
+        // a non-zero exit, and a Kubernetes Job counts a zero exit as success.
+        Assert.True(node.ExitCode == 1, $"The node exited with code {node.ExitCode}, not 1.\n{node.Output}");
         Assert.False(everReady, $"The node reported ready although its bucket fails the checks.\n{node.Output}");
         Assert.Contains("does not have uniform bucket-level access enabled", node.Output, StringComparison.Ordinal);
         Assert.Empty(await ListBucketAsync());

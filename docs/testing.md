@@ -37,7 +37,8 @@ that a server node downloads. They are the only tests that show these facts:
 - A 3-node cluster takes a coordinated backup and an incremental backup. Every node lists the same
   backups from the bucket. A fourth node seeds its store from the bucket with
   `--pitr-bootstrap-from` and joins.
-- A node whose bucket fails the checks does not start, as a standalone node and as a cluster node.
+- A node whose bucket fails the checks does not start and exits with code 1, as a standalone node and
+  as a cluster node.
 
 The tests need a published server and a bundle. Without them, they are skipped. A local run can use
 the output of `scripts/publish-bundle.sh`, which is the same set of files as the package folder:

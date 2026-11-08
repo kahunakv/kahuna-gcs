@@ -37,7 +37,8 @@
 
   <!--
     Kahuna.Core carries the backup storage contracts this package implements. 1.16.2 is the first
-    release whose IBackupStorageProvider the server loads from an extension assembly. Tracks the
+    release whose IBackupStorageProvider the server loads from an extension assembly, and 1.16.3 is
+    the first whose server exits with a non-zero code when the backup storage cannot start. Tracks the
     latest Kahuna release; CI builds and tests against whatever version is pinned here.
 
     This project makes two products, and they need different things from this reference:
@@ -52,7 +53,7 @@
     scripts/publish-bundle.sh restores and publishes with the property set.
   -->
   <ItemGroup>
-    <PackageReference Include="Kahuna.Core" Version="1.16.2">
+    <PackageReference Include="Kahuna.Core" Version="1.16.3">
       <ExcludeAssets Condition="'$(ExtensionBundle)' == 'true'">runtime;native</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
