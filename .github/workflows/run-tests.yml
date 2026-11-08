@@ -37,17 +37,20 @@ jobs:
       - name: Publish the Kahuna server
         run: dotnet publish kahuna-server-src/Kahuna.Server/Kahuna.Server.csproj -c Release -o "$RUNNER_TEMP/kahuna-server"
       - name: Publish the extension bundle
-        run: scripts/publish-bundle.sh -o "$RUNNER_TEMP/gcs-bundle" --no-zip
+        run: scripts/publish-bundle.sh -o "$RUNNER_TEMP/gcs-bundle"
+      - name: Pack
+        run: dotnet pack Kahuna.Storage.Gcs/Kahuna.Storage.Gcs.csproj --no-build -c Release -o artifacts -p:ExtensionBundleDir="$RUNNER_TEMP/gcs-bundle"
+      - name: Extract the extension bundle from the package
+        # The server tests load the bundle exactly as a server node installs it: from the package.
+        run: unzip -q artifacts/Kahuna.Storage.Gcs.*.nupkg 'tools/kahuna-extension/*' -d "$RUNNER_TEMP/gcs-package"
       - name: Run Tests
         # The emulator suite skips itself when no server answers, and the server tests skip themselves
         # without a published server and bundle. FailSkips turns those skips into failures here, so a
         # missing emulator, server or bundle cannot pass the build with nothing exercised.
         env:
           KAHUNA_SERVER_DLL: ${{ runner.temp }}/kahuna-server/Kahuna.Server.dll
-          KAHUNA_GCS_BUNDLE_DLL: ${{ runner.temp }}/gcs-bundle/Kahuna.Storage.Gcs.dll
+          KAHUNA_GCS_BUNDLE_DLL: ${{ runner.temp }}/gcs-package/tools/kahuna-extension/Kahuna.Storage.Gcs.dll
         run: dotnet test Kahuna.Storage.Gcs.slnx --no-build -c Release -l "console;verbosity=normal" -- xUnit.FailSkips=true
-      - name: Pack
-        run: dotnet pack Kahuna.Storage.Gcs/Kahuna.Storage.Gcs.csproj --no-build -c Release -o artifacts
       - name: Dump GCS emulator logs
         if: failure()
         run: docker compose logs --timestamps

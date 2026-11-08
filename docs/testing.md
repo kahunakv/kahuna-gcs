@@ -26,8 +26,9 @@ With this option, a skipped test fails the run.
 
 ## Server tests
 
-The tests in `TestServerEndToEnd` start the real Kahuna server with the published extension bundle,
-and use only its REST API. They are the only tests that show these facts:
+The tests in `TestServerEndToEnd` start the real Kahuna server with the extension bundle, and use
+only its REST API. CI extracts the bundle from the package that it packs, so the tests load the files
+that a server node downloads. They are the only tests that show these facts:
 
 - The bundle loads in the server, and its Google dependencies resolve next to the server's own
   versions of `Google.Protobuf` and `Grpc.*`.
@@ -38,11 +39,12 @@ and use only its REST API. They are the only tests that show these facts:
   `--pitr-bootstrap-from` and joins.
 - A node whose bucket fails the checks does not start, as a standalone node and as a cluster node.
 
-The tests need a published server and a published bundle. Without them, they are skipped:
+The tests need a published server and a bundle. Without them, they are skipped. A local run can use
+the output of `scripts/publish-bundle.sh`, which is the same set of files as the package folder:
 
 ```sh
 dotnet publish <kahuna>/Kahuna.Server/Kahuna.Server.csproj -c Release -o /tmp/kahuna-server
-scripts/publish-bundle.sh -o /tmp/gcs-bundle --no-zip
+scripts/publish-bundle.sh -o /tmp/gcs-bundle
 
 export KAHUNA_SERVER_DLL=/tmp/kahuna-server/Kahuna.Server.dll
 export KAHUNA_GCS_BUNDLE_DLL=/tmp/gcs-bundle/Kahuna.Storage.Gcs.dll

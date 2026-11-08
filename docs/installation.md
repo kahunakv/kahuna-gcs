@@ -13,28 +13,32 @@ This page tells you how to connect the GCS backup target to a Kahuna host. For t
 
 The Kahuna server loads the target from an extension assembly. You do not write code.
 
-1. Put the extension bundle into a directory on each node. The bundle is the DLL, its `.deps.json`
-   file and the Google client libraries. Get it in one of two ways:
+1. On each node, download the NuGet package and extract its extension bundle. The bundle is the
+   DLL, its `.deps.json` file and the Google client libraries, in the folder
+   `tools/kahuna-extension/` of the package. The node needs no .NET SDK for this:
 
-   - Download `kahuna-storage-gcs-<version>.zip` from the GitHub release, and extract it.
-   - Build it from the source:
+   ```sh
+   VERSION=<package version>
+   curl -fsSL -o /tmp/kahuna-storage-gcs.nupkg \
+     "https://api.nuget.org/v3-flatcontainer/kahuna.storage.gcs/$VERSION/kahuna.storage.gcs.$VERSION.nupkg"
+   unzip -q /tmp/kahuna-storage-gcs.nupkg 'tools/kahuna-extension/*' -d /opt/kahuna/backup-gcs
+   ```
 
-     ```sh
-     scripts/publish-bundle.sh -o /opt/kahuna/backup-gcs
-     ```
-
-   Do not use the DLL from the NuGet package. The server reads the `.deps.json` file next to the DLL
-   to find the Google dependencies.
+   Keep the folder layout as it is. The `.deps.json` file finds the dependencies by their paths in
+   that folder. Do not use the DLL from `lib/` in the package: it has no `.deps.json` file and no
+   Google libraries, and the server refuses it.
 
    The bundle has no copy of `Kahuna.Core`, Kommander, `Grpc.*`, `Google.Protobuf` or the RocksDB and
-   SQLite native files, because the server supplies them. The script fails if a copy gets into the
-   bundle. A plain `dotnet publish` also gives a bundle that loads, but that bundle has all these
-   copies and is approximately 150 MB.
+   SQLite native files, because the server supplies them.
+
+   To build the same bundle from the source, run `scripts/publish-bundle.sh -o <directory>`. A plain
+   `dotnet publish` also gives a bundle that loads, but that bundle has copies of the server's own
+   files and is approximately 150 MB.
 
 2. Start the server with these options:
 
    ```sh
-   kahuna-server --extension-assembly /opt/kahuna/backup-gcs/Kahuna.Storage.Gcs.dll \
+   kahuna-server --extension-assembly /opt/kahuna/backup-gcs/tools/kahuna-extension/Kahuna.Storage.Gcs.dll \
                  --pitr-backup-dir /var/lib/kahuna/backups \
                  --pitr-backup-target gcs \
                  --pitr-backup-scratch-dir /var/lib/kahuna/scratch \

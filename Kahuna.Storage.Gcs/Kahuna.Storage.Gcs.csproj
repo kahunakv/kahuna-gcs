@@ -57,6 +57,52 @@
     </PackageReference>
   </ItemGroup>
 
+  <!--
+    The package also carries the extension bundle, under tools/kahuna-extension/, so a server node
+    installs the target from NuGet: download the package, extract that folder, and give the server the
+    DLL there as its extension assembly. NuGet treats nothing under tools/ as a reference, so an
+    embedding host gets lib/ only. (A DLL outside lib/ anywhere else draws warning NU5100.)
+
+    The pack takes the bundle from ExtensionBundleDir, the output of scripts/publish-bundle.sh, as an
+    absolute path (MSBuild resolves a relative one against this project folder). It refuses a folder
+    that would ship a package the server cannot use: no bundle, a plain publish that still carries the
+    server's own assemblies, or a bundle built for another version.
+  -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeExtensionBundle</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="IncludeExtensionBundle">
+    <PropertyGroup>
+      <_BundleDir Condition="'$(ExtensionBundleDir)' != ''">$([MSBuild]::EnsureTrailingSlash('$([System.IO.Path]::GetFullPath('$(ExtensionBundleDir)'))'))</_BundleDir>
+      <_BundleDll>$(_BundleDir)$(AssemblyName).dll</_BundleDll>
+      <_BundleDeps>$(_BundleDir)$(AssemblyName).deps.json</_BundleDeps>
+    </PropertyGroup>
+
+    <Error Condition="'$(ExtensionBundleDir)' == ''"
+           Text="The package carries the extension bundle. Run scripts/publish-bundle.sh and pass its output folder with -p:ExtensionBundleDir=..., or pack with scripts/set-version.sh, which does both." />
+    <Error Condition="!Exists('$(_BundleDll)') Or !Exists('$(_BundleDeps)')"
+           Text="ExtensionBundleDir '$(_BundleDir)' has no $(AssemblyName).dll and $(AssemblyName).deps.json. Use the output of scripts/publish-bundle.sh." />
+    <Error Condition="$([System.IO.File]::ReadAllText('$(_BundleDeps)').Contains('&quot;Kahuna.Core/'))"
+           Text="ExtensionBundleDir '$(_BundleDir)' carries Kahuna.Core. It is a plain dotnet publish, not the trimmed bundle. Use the output of scripts/publish-bundle.sh." />
+
+    <GetAssemblyIdentity AssemblyFiles="$(_BundleDll);@(IntermediateAssembly->'%(FullPath)')">
+      <Output TaskParameter="Assemblies" ItemName="_BundleIdentity" />
+    </GetAssemblyIdentity>
+
+    <PropertyGroup>
+      <_BundleVersions>@(_BundleIdentity->'%(Version)'->Distinct())</_BundleVersions>
+    </PropertyGroup>
+
+    <Error Condition="$(_BundleVersions.Contains(';'))"
+           Text="ExtensionBundleDir '$(_BundleDir)' holds $(AssemblyName) of another version than this pack ($(_BundleVersions)). Publish the bundle again." />
+
+    <ItemGroup>
+      <_BundleFile Include="$(_BundleDir)**/*" />
+      <TfmSpecificPackageFile Include="@(_BundleFile)" PackagePath="tools/kahuna-extension/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="\" />
   </ItemGroup>

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Set a single version across every packable project and pack the NuGet packages.
+# Set a single version across every packable project and pack the NuGet packages. The pack first
+# publishes the extension bundle (scripts/publish-bundle.sh), which the package carries.
 #
 # A "packable project" here is a .csproj that carries a <PackageId> and does not opt out with
 # <IsPackable>false</IsPackable>. The test project is skipped and reported.
@@ -26,7 +27,7 @@ PACK=1
 DRY_RUN=0
 
 usage() {
-  sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -136,6 +137,16 @@ echo "Packing ${#PACKABLE[@]} project(s)..."
 # NuGet leaves build metadata (+...) out of the package file name.
 FILE_VERSION="${VERSION%%+*}"
 
+# The package carries the extension bundle that a server node loads, and the pack refuses to run
+# without it. It is published here, from the version just written, so it cannot be a stale bundle.
+BUNDLE_WORK="$(mktemp -d)"
+trap 'rm -rf "$BUNDLE_WORK"' EXIT
+BUNDLE_DIR="$BUNDLE_WORK/bundle"
+
+echo
+echo "==> extension bundle"
+"$SCRIPT_DIR/publish-bundle.sh" -c "$CONFIGURATION" -o "$BUNDLE_DIR"
+
 PACKED=()
 for project in "${PACKABLE[@]}"; do
   package_id="$(grep -oE '<PackageId>[^<]+</PackageId>' "$project" | head -n1 | sed -E 's#</?PackageId>##g')"
@@ -148,7 +159,7 @@ for project in "${PACKABLE[@]}"; do
   echo "==> $package_id"
   # PackageId stays in the csproj: passing it here would flow as a global property into the whole
   # restore graph and collide with the referenced projects.
-  dotnet pack "$project" -c "$CONFIGURATION" -o "$OUTPUT"
+  dotnet pack "$project" -c "$CONFIGURATION" -o "$OUTPUT" -p:ExtensionBundleDir="$BUNDLE_DIR"
 
   if [[ ! -f "$expected" ]]; then
     echo "error: expected package not produced: $expected" >&2

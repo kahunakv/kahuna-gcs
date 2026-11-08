@@ -382,19 +382,39 @@ public class TestServerEndToEnd(GcsEmulatorFixture fixture) : IAsyncLifetime
         return value;
     }
 
+    /// <summary>
+    /// The outcomes for which the backup contract says that nothing was published and the caller may
+    /// retry. A node answers some of them for a short time after the cluster forms: the meta leader can
+    /// move, and a transaction of the cluster's own start can be in flight during the first capture.
+    /// </summary>
+    private static readonly HashSet<string> RetryableBackupOutcomes = new(StringComparer.Ordinal)
+    {
+        nameof(KahunaBackupOutcome.RetryableLeadershipLoss),
+        nameof(KahunaBackupOutcome.TopologyChanged),
+        nameof(KahunaBackupOutcome.NotBackupCoordinator),
+        nameof(KahunaBackupOutcome.CutUnverified),
+        nameof(KahunaBackupOutcome.PartitionCaptureFailed)
+    };
+
+    /// <summary>
+    /// Takes a backup on one node. A retryable outcome is retried up to the operation timeout; any other
+    /// refusal fails the test at once.
+    /// </summary>
     private async Task<KahunaBackupInfo> PostBackupAsync(KahunaServerProcess node, string route, object? body)
     {
-        using HttpResponseMessage response = body is null
-            ? await http.PostAsync(new Uri(node.BaseAddress, route), content: null, Ct)
-            : await http.PostAsJsonAsync(new Uri(node.BaseAddress, route), body, Ct);
+        DateTime deadline = DateTime.UtcNow + OperationTimeout;
 
-        string text = await response.Content.ReadAsStringAsync(Ct);
-        Assert.True(response.IsSuccessStatusCode, $"POST {route} on {node} answered {(int)response.StatusCode}: {text}");
+        while (true)
+        {
+            (KahunaBackupInfo? info, string answer) = await TryPostBackupAsync(node, route, body);
+            if (info is not null)
+                return info;
 
-        KahunaBackupInfo? info = JsonSerializer.Deserialize<KahunaBackupInfo>(text);
-        Assert.NotNull(info);
-        Assert.False(info.IsInvalid, info.InvalidReason);
-        return info;
+            if (DateTime.UtcNow >= deadline)
+                throw new TimeoutException($"POST {route} on {node} did not succeed within {OperationTimeout}. Last answer: {answer}");
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), Ct);
+        }
     }
 
     /// <summary>
@@ -412,29 +432,45 @@ public class TestServerEndToEnd(GcsEmulatorFixture fixture) : IAsyncLifetime
         {
             foreach (KahunaServerProcess node in cluster)
             {
-                using HttpResponseMessage response =
-                    await http.PostAsync(new Uri(node.BaseAddress, "v1/backups/coordinated"), content: null, Ct);
-
-                string text = await response.Content.ReadAsStringAsync(Ct);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    KahunaBackupInfo? info = JsonSerializer.Deserialize<KahunaBackupInfo>(text);
-                    Assert.NotNull(info);
+                (KahunaBackupInfo? info, string answer) = await TryPostBackupAsync(node, "v1/backups/coordinated", body: null);
+                if (info is not null)
                     return (node, info);
-                }
 
-                last = $"{node} answered {(int)response.StatusCode}: {text}";
-
-                bool notCoordinator = response.Headers.TryGetValues(KahunaBackupWire.OutcomeHttpHeader, out IEnumerable<string>? outcome)
-                                      && outcome.Contains(nameof(KahunaBackupOutcome.NotBackupCoordinator), StringComparer.Ordinal);
-                Assert.True(notCoordinator, last);
+                last = answer;
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(500), Ct);
         }
 
         throw new TimeoutException($"No node took the coordinated backup within {OperationTimeout}. Last answer: {last}");
+    }
+
+    /// <summary>
+    /// One backup request. Returns the backup on success, or null with the answer when the outcome is
+    /// retryable. Fails the test on any other answer.
+    /// </summary>
+    private async Task<(KahunaBackupInfo? Info, string Answer)> TryPostBackupAsync(
+        KahunaServerProcess node, string route, object? body)
+    {
+        using HttpResponseMessage response = body is null
+            ? await http.PostAsync(new Uri(node.BaseAddress, route), content: null, Ct)
+            : await http.PostAsJsonAsync(new Uri(node.BaseAddress, route), body, Ct);
+
+        string text = await response.Content.ReadAsStringAsync(Ct);
+        string answer = $"POST {route} on {node} answered {(int)response.StatusCode}: {text}";
+
+        if (response.IsSuccessStatusCode)
+        {
+            KahunaBackupInfo? info = JsonSerializer.Deserialize<KahunaBackupInfo>(text);
+            Assert.NotNull(info);
+            Assert.False(info.IsInvalid, info.InvalidReason);
+            return (info, answer);
+        }
+
+        bool retryable = response.Headers.TryGetValues(KahunaBackupWire.OutcomeHttpHeader, out IEnumerable<string>? outcome)
+                         && outcome.Any(RetryableBackupOutcomes.Contains);
+        Assert.True(retryable, answer);
+        return (null, answer);
     }
 
     private async Task<List<KahunaBackupInfo>> ListAsync(KahunaServerProcess node)

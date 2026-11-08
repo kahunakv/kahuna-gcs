@@ -17,13 +17,16 @@ New to the terms on these pages? Read the
 
 ## Quick start
 
-On the Kahuna server, extract the extension bundle (`kahuna-storage-gcs-<version>.zip` from the
-GitHub release, or the output of `scripts/publish-bundle.sh`) and load it with `--extension-assembly`:
+On the Kahuna server, extract the extension bundle from the NuGet package and load it with
+`--extension-assembly`:
 
 ```sh
-scripts/publish-bundle.sh -o /opt/kahuna/backup-gcs
+VERSION=<package version>
+curl -fsSL -o /tmp/kahuna-storage-gcs.nupkg \
+  "https://api.nuget.org/v3-flatcontainer/kahuna.storage.gcs/$VERSION/kahuna.storage.gcs.$VERSION.nupkg"
+unzip -q /tmp/kahuna-storage-gcs.nupkg 'tools/kahuna-extension/*' -d /opt/kahuna/backup-gcs
 
-kahuna-server --extension-assembly /opt/kahuna/backup-gcs/Kahuna.Storage.Gcs.dll \
+kahuna-server --extension-assembly /opt/kahuna/backup-gcs/tools/kahuna-extension/Kahuna.Storage.Gcs.dll \
               --pitr-backup-dir /var/lib/kahuna/backups \
               --pitr-backup-target gcs \
               --pitr-backup-scratch-dir /var/lib/kahuna/scratch \
