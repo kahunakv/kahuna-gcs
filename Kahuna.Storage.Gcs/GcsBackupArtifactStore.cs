@@ -63,9 +63,7 @@ public sealed class GcsBackupArtifactStore : IBackupArtifactStore
         // checked at startup instead.
         SupportsPosixHardening: false,
         // An HTTP range request bills and transfers only the requested bytes.
-        SupportsCheapRangeReads: true,
-        // No backend can checkpoint into a bucket or open one, so every checkpoint transits local disk.
-        RequiresLocalScratch: true);
+        SupportsCheapRangeReads: true);
 
     /// <inheritdoc />
     public async Task<bool> BackupExistsAsync(Guid backupId, CancellationToken ct = default)

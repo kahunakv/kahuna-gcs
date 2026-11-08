@@ -3,101 +3,100 @@ using Google.Apis.Json;
 using Google.Cloud.Storage.V1;
 using Kahuna.Server.Persistence.Pitr;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Kahuna.Storage.Gcs;
 
 /// <summary>
-/// Entry point for backing Kahuna's point-in-time recovery with a Google Cloud Storage bucket.
+/// The backup storage of one node in a Google Cloud Storage bucket, from <see cref="GcsBackupStorageProvider.Open"/>.
 /// <para>
-/// A host installs it by assigning the returned provider to <c>KahunaConfiguration.BackupStorageProvider</c>
-/// (or <c>EmbeddedKahunaOptions.BackupStorageProvider</c>) and setting the backup target to
-/// <see cref="TargetName"/>. Kahuna's core never references this package — an embedded consumer inherits
-/// whatever the core depends on, so a cloud SDK belongs behind the extension point rather than inside it.
+/// <see cref="StartAsync"/> builds the client, resolves the credentials and checks the bucket. The checks run
+/// here, one time, before the node joins its cluster: a node whose backup destination is unreachable or
+/// unprotected must fail to start, not come up healthy and discover it at the first scheduled backup, which is
+/// typically the moment nobody is watching.
 /// </para>
-/// <example>
-/// <code>
-/// BackupStorageProvider provider = await GcsBackupStorage.CreateProviderAsync(
-///     new GcsBackupStorageOptions { Bucket = "acme-kahuna-backups", Prefix = "prod/" }, logger);
-///
-/// configuration.BackupTarget = GcsBackupStorage.TargetName;
-/// configuration.BackupScratchDir = "/var/lib/kahuna/backup-scratch";
-/// configuration.BackupStorageProvider = provider;
-/// </code>
-/// </example>
 /// </summary>
-public static class GcsBackupStorage
+internal sealed class GcsBackupStorage(GcsBackupStorageOptions options, string scratchDir, ILogger logger) : IBackupStorage
 {
-    /// <summary>
-    /// Value the backup target must be set to for this provider to be selected. Kahuna refuses to start
-    /// with a non-local target and no provider registered, so a typo here surfaces at startup rather
-    /// than as backups quietly going to local disk.
-    /// </summary>
-    public const string TargetName = "gcs";
+    // Guards the publication of the started stores against Dispose.
+    private readonly Lock sync = new();
 
-    /// <summary>
-    /// Builds a storage provider after verifying the bucket is usable and configured the way a backup
-    /// target requires.
-    /// <para>
-    /// The verification is done here, once, rather than on first use: a node whose backup destination is
-    /// unreachable or unprotected should fail to start, not come up healthy and discover it at the first
-    /// scheduled backup — which is typically the moment nobody is watching.
-    /// </para>
-    /// </summary>
-    /// <param name="options">Bucket, credentials, transfer sizing, and which bucket protections are mandatory.</param>
-    /// <param name="logger">Receives warnings about bucket settings that defeat reclamation. Optional.</param>
-    /// <param name="ct">Cancels the startup verification.</param>
-    public static async Task<BackupStorageProvider> CreateProviderAsync(
-        GcsBackupStorageOptions options, ILogger? logger = null, CancellationToken ct = default)
+    private StorageClient? client;
+
+    private GcsBackupStorageTarget? manifests;
+
+    private GcsBackupArtifactStore? artifacts;
+
+    private bool disposed;
+
+    public IBackupStorageTarget Manifests =>
+        manifests ?? throw new InvalidOperationException("The Google Cloud Storage backup target is not started.");
+
+    public IBackupArtifactStore Artifacts =>
+        artifacts ?? throw new InvalidOperationException("The Google Cloud Storage backup target is not started.");
+
+    public async Task StartAsync(CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        options.Validate();
+        lock (sync)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
 
-        ILogger effectiveLogger = logger ?? NullLogger.Instance;
+            if (manifests is not null)
+                return;
+        }
 
-        StorageClient client = await CreateClientAsync(options, ct).ConfigureAwait(false);
-        await GcsBucketVerifier.VerifyAsync(client, options.Bucket, options, effectiveLogger, ct).ConfigureAwait(false);
+        StorageClient built = await CreateClientAsync(options, ct).ConfigureAwait(false);
+
+        try
+        {
+            await GcsBucketVerifier.VerifyAsync(built, options.Bucket, options, logger, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            built.Dispose();
+            throw;
+        }
 
         GcsObjectLayout layout = new(options.Prefix);
-        int chunkSize = RoundUpToChunkBoundary(options.ResumableChunkSizeBytes);
 
-        return context =>
+        lock (sync)
         {
-            // The scratch directory is mandatory and Kahuna validates it at startup, but a host can
-            // construct a configuration without going through that path — and the failure it would
-            // otherwise produce is an unhelpful one deep inside a checkpoint write.
-            if (string.IsNullOrWhiteSpace(context.ScratchDir))
-                throw new GcsBackupStorageException(
-                    "The Google Cloud Storage backup target stages every checkpoint through a local directory, " +
-                    "because a persistence backend can only write one through the filesystem. Configure a backup " +
-                    "scratch directory and size it for one full backup, which transits it in its entirety.");
+            // A dispose during the start, or a start that ran at the same time and completed first: this
+            // client has no owner.
+            if (disposed || manifests is not null)
+            {
+                built.Dispose();
+                ObjectDisposedException.ThrowIf(disposed, this);
+                return;
+            }
 
-            return new BackupStoragePair(
-                new GcsBackupStorageTarget(client, options.Bucket, layout, options.FailOnManifestIdCollision),
-                new GcsBackupArtifactStore(
-                    client,
-                    options.Bucket,
-                    layout,
-                    context.ScratchDir,
-                    options.ResumableUploadThresholdBytes,
-                    chunkSize,
-                    effectiveLogger));
-        };
+            client = built;
+            artifacts = new GcsBackupArtifactStore(
+                built,
+                options.Bucket,
+                layout,
+                scratchDir,
+                options.ResumableUploadThresholdBytes,
+                RoundUpToChunkBoundary(options.ResumableChunkSizeBytes),
+                logger);
+            manifests = new GcsBackupStorageTarget(built, options.Bucket, layout, options.FailOnManifestIdCollision);
+        }
     }
 
-    /// <summary>
-    /// Verifies the bucket without building a provider, for a host that wants to check its backup
-    /// destination as part of a readiness probe or a configuration lint.
-    /// </summary>
-    public static async Task VerifyBucketAsync(
-        GcsBackupStorageOptions options, ILogger? logger = null, CancellationToken ct = default)
+    public void Dispose()
     {
-        ArgumentNullException.ThrowIfNull(options);
-        options.Validate();
+        StorageClient? started;
 
-        StorageClient client = await CreateClientAsync(options, ct).ConfigureAwait(false);
-        await GcsBucketVerifier.VerifyAsync(client, options.Bucket, options, logger ?? NullLogger.Instance, ct)
-            .ConfigureAwait(false);
+        lock (sync)
+        {
+            if (disposed)
+                return;
+
+            disposed = true;
+            started = client;
+            client = null;
+        }
+
+        started?.Dispose();
     }
 
     private static async Task<StorageClient> CreateClientAsync(GcsBackupStorageOptions options, CancellationToken ct)
@@ -133,6 +132,9 @@ public static class GcsBackupStorage
     /// </summary>
     private static async Task<GoogleCredential> LoadServiceAccountCredentialAsync(string path, CancellationToken ct)
     {
+        if (!File.Exists(path))
+            throw new GcsBackupStorageException("The configured Google Cloud credentials file does not exist.");
+
         string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
 
         JsonCredentialParameters? parameters;

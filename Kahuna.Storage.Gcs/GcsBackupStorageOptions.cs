@@ -93,32 +93,29 @@ public sealed class GcsBackupStorageOptions
     public bool FailOnManifestIdCollision { get; set; } = true;
 
     /// <summary>
-    /// Base address of a GCS-compatible endpoint, for running against an emulator. Null uses the real
-    /// service. An emulator exercises the object protocol only — never credentials, IAM, or bucket
+    /// Base address of a GCS-compatible endpoint, for running against an emulator in tests. Null uses the real
+    /// service. With an address, the client sends no credentials. An emulator exercises the object protocol only — never credentials, IAM, or bucket
     /// policy — so a deployment verified solely against one has verified none of its access control.
     /// </summary>
     public string? EmulatorBaseUri { get; set; }
 
     /// <summary>
-    /// Throws when the options cannot produce a working target, at startup rather than at the first
-    /// backup.
+    /// Throws <see cref="KahunaServerException"/> when the options cannot produce a working target, when the node
+    /// is built rather than at the first backup. Does no I/O: the credentials file is read when the storage starts.
     /// </summary>
     internal void Validate()
     {
         if (string.IsNullOrWhiteSpace(Bucket))
-            throw new ArgumentException("A Google Cloud Storage backup target requires a bucket name.", nameof(Bucket));
+            throw new KahunaServerException(
+                $"A Google Cloud Storage backup target requires a bucket name ({GcsExtensionOptions.Bucket}).");
 
         if (ResumableUploadThresholdBytes < 0)
-            throw new ArgumentOutOfRangeException(
-                nameof(ResumableUploadThresholdBytes), "The resumable upload threshold cannot be negative.");
+            throw new KahunaServerException(
+                $"The resumable upload threshold ({GcsExtensionOptions.ResumableUploadThresholdBytes}) cannot be negative.");
 
         if (ResumableChunkSizeBytes <= 0)
-            throw new ArgumentOutOfRangeException(
-                nameof(ResumableChunkSizeBytes), "The resumable chunk size must be positive.");
-
-        if (CredentialsPath is not null && !File.Exists(CredentialsPath))
-            throw new FileNotFoundException(
-                "The configured Google Cloud credentials file does not exist.", CredentialsPath);
+            throw new KahunaServerException(
+                $"The resumable chunk size ({GcsExtensionOptions.ResumableChunkSizeBytes}) must be positive.");
     }
 }
 

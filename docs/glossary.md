@@ -9,7 +9,8 @@
 | Prefix | A text that starts the name of each object that Kahuna writes, for example `prod/`. |
 | Host | The process that runs Kahuna: the Kahuna server, or an application that embeds `Kahuna.Core`. |
 | Backup target | The place where Kahuna writes backups. The default target is a local directory. This package adds the `gcs` target. |
-| Provider | The object that `GcsBackupStorage.CreateProviderAsync` returns. Kahuna uses it to read and write the bucket. |
+| Provider | `GcsBackupStorageProvider`. Kahuna finds it by its target name, `gcs`, and uses it to open the backup storage of a node. |
+| Extension assembly | A DLL that the Kahuna server loads with `--extension-assembly`. This package is one. |
 | PITR | Point-in-time recovery. A restore of the data as it was at a selected time. |
 | Full backup | A complete copy of the data at one time. |
 | Incremental backup | The changes after the last backup. |

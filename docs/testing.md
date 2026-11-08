@@ -24,6 +24,35 @@ dotnet test -- xUnit.FailSkips=true
 
 With this option, a skipped test fails the run.
 
+## Server tests
+
+The tests in `TestServerEndToEnd` start the real Kahuna server with the published extension bundle,
+and use only its REST API. They are the only tests that show these facts:
+
+- The bundle loads in the server, and its Google dependencies resolve next to the server's own
+  versions of `Google.Protobuf` and `Grpc.*`.
+- A standalone node takes a full and an incremental backup into the bucket. A restore from the bucket
+  gives a store that a new node serves the keys from.
+- A 3-node cluster takes a coordinated backup and an incremental backup. Every node lists the same
+  backups from the bucket. A fourth node seeds its store from the bucket with
+  `--pitr-bootstrap-from` and joins.
+- A node whose bucket fails the checks does not start, as a standalone node and as a cluster node.
+
+The tests need a published server and a published bundle. Without them, they are skipped:
+
+```sh
+dotnet publish <kahuna>/Kahuna.Server/Kahuna.Server.csproj -c Release -o /tmp/kahuna-server
+scripts/publish-bundle.sh -o /tmp/gcs-bundle --no-zip
+
+export KAHUNA_SERVER_DLL=/tmp/kahuna-server/Kahuna.Server.dll
+export KAHUNA_GCS_BUNDLE_DLL=/tmp/gcs-bundle/Kahuna.Storage.Gcs.dll
+dotnet test --filter "FullyQualifiedName~TestServerEndToEnd"
+```
+
+The server must have a `Kahuna.Core` version that is equal to or higher than the version that this
+package references. CI builds the server from the Kahuna repository at the ref in
+`KAHUNA_SERVER_REF`, in `.github/workflows/run-tests.yml`.
+
 ## What the emulator supports
 
 We checked each item below against the emulator image.
@@ -46,7 +75,6 @@ We checked each item below against the emulator image.
 - **Artifacts of many gigabytes.** The tests check the streaming path byte by byte at a few
   megabytes only. A production checkpoint can be much larger.
 - **More than one writer in one bucket.** The package assumes one writer, as the local target does.
-- **A full backup and restore through `BackupService`.** The tests use each contract member against a
-  real storage client. The backup driver, the verifier, the restore engine, and retention are internal
-  to `Kahuna.Core`. This package cannot run them. The Kahuna test suite tests them against an object
-  store. A test against this store belongs in the Kahuna repository.
+- **Retention and backup garbage collection through the server.** The server tests take, list,
+  restore and seed from backups. They do not run the retention policy or `v1/backups/gc` against the
+  bucket. The Kahuna test suite tests these against an object store.

@@ -8,6 +8,11 @@
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- The Kahuna server loads this assembly as an extension assembly, so its output carries the
+         .deps.json a plugin load needs. The server reads its own runtimeconfig, never the extension's, so
+         the package and the bundle carry none. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -31,12 +36,25 @@
   </ItemGroup>
 
   <!--
-    Kahuna.Core carries the backup storage contracts this package implements. 1.0.7 is the first
-    release that exposes them: earlier versions kept them internal and synchronous. Tracks the
+    Kahuna.Core carries the backup storage contracts this package implements. 1.16.2 is the first
+    release whose IBackupStorageProvider the server loads from an extension assembly. Tracks the
     latest Kahuna release; CI builds and tests against whatever version is pinned here.
+
+    This project makes two products, and they need different things from this reference:
+      - The NuGet package, for a host that embeds Kahuna. It must declare Kahuna.Core as a full
+        dependency, or a host that references only this package compiles and then fails at run time
+        because Kahuna.Core.dll is not copied.
+      - The extension bundle, for the server (dotnet publish -p:ExtensionBundle=true). The server
+        always supplies Kahuna.Core and everything under it (Kommander, Grpc, the RocksDB and SQLite
+        natives), so the bundle must not carry copies of them. Excluding the runtime and native assets
+        here also excludes them from every package reached only through Kahuna.Core.
+    NuGet reads the dependency list from the restore output, so the two cannot share one restore:
+    scripts/publish-bundle.sh restores and publishes with the property set.
   -->
   <ItemGroup>
-    <PackageReference Include="Kahuna.Core" Version="1.15.6" />
+    <PackageReference Include="Kahuna.Core" Version="1.16.2">
+      <ExcludeAssets Condition="'$(ExtensionBundle)' == 'true'">runtime;native</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

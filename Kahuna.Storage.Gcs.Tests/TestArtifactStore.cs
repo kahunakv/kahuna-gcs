@@ -24,7 +24,6 @@ public class TestArtifactStore(GcsEmulatorFixture fixture)
         // Declaring POSIX hardening would claim a security control that is not applied anywhere.
         Assert.False(ctx.Artifacts.Capabilities.SupportsPosixHardening);
         Assert.True(ctx.Artifacts.Capabilities.SupportsCheapRangeReads);
-        Assert.True(ctx.Artifacts.Capabilities.RequiresLocalScratch);
     }
 
     [Fact]

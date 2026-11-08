@@ -5,12 +5,24 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+env:
+  # The Kahuna server that the server tests load the bundle into. It must have a Kahuna.Core version
+  # equal to or higher than the one this package references; a lower one refuses the bundle, and the
+  # tests fail with a message that names both versions. Pin a commit or a tag here to stop a change on
+  # the Kahuna main branch from failing this build.
+  KAHUNA_SERVER_REF: main
 jobs:
   Kahuna-Gcs-Tests:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v5
+      - name: Check out the Kahuna server
+        uses: actions/checkout@v5
+        with:
+          repository: kahunakv/kahuna
+          ref: ${{ env.KAHUNA_SERVER_REF }}
+          path: kahuna-server-src
       - name: Install .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -22,9 +34,17 @@ jobs:
         run: dotnet restore Kahuna.Storage.Gcs.slnx
       - name: Build
         run: dotnet build Kahuna.Storage.Gcs.slnx --no-restore -c Release
+      - name: Publish the Kahuna server
+        run: dotnet publish kahuna-server-src/Kahuna.Server/Kahuna.Server.csproj -c Release -o "$RUNNER_TEMP/kahuna-server"
+      - name: Publish the extension bundle
+        run: scripts/publish-bundle.sh -o "$RUNNER_TEMP/gcs-bundle" --no-zip
       - name: Run Tests
-        # The emulator suite skips itself when no server answers. FailSkips turns those skips into
-        # failures here, so an emulator that never came up cannot pass the build with nothing exercised.
+        # The emulator suite skips itself when no server answers, and the server tests skip themselves
+        # without a published server and bundle. FailSkips turns those skips into failures here, so a
+        # missing emulator, server or bundle cannot pass the build with nothing exercised.
+        env:
+          KAHUNA_SERVER_DLL: ${{ runner.temp }}/kahuna-server/Kahuna.Server.dll
+          KAHUNA_GCS_BUNDLE_DLL: ${{ runner.temp }}/gcs-bundle/Kahuna.Storage.Gcs.dll
         run: dotnet test Kahuna.Storage.Gcs.slnx --no-build -c Release -l "console;verbosity=normal" -- xUnit.FailSkips=true
       - name: Pack
         run: dotnet pack Kahuna.Storage.Gcs/Kahuna.Storage.Gcs.csproj --no-build -c Release -o artifacts

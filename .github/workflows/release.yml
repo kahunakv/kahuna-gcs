@@ -1,0 +1,33 @@
+name: Release Bundle
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the bundle to
+        required: true
+permissions:
+  contents: write
+jobs:
+  Extension-Bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - name: Install .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish extension bundle
+        # The script publishes with -p:ExtensionBundle=true and fails if the bundle carries a copy of
+        # anything the Kahuna server supplies, so a bundle that would bloat or shadow host assemblies
+        # never reaches the release.
+        run: scripts/publish-bundle.sh
+      - name: Attach bundle to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release upload "$TAG" artifacts/kahuna-storage-gcs-*.zip --clobber

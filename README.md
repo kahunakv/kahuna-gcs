@@ -12,22 +12,35 @@ New to the terms on these pages? Read the
 ## Requirements
 
 - .NET 10.
-- `Kahuna.Core` 1.15.6 or later. The package references it directly. Versions before 1.0.7 do not
-  have the backup storage contracts that this package implements.
+- `Kahuna.Core` 1.16.2 or later. Earlier versions cannot load a backup target from an extension
+  assembly.
 
 ## Quick start
+
+On the Kahuna server, extract the extension bundle (`kahuna-storage-gcs-<version>.zip` from the
+GitHub release, or the output of `scripts/publish-bundle.sh`) and load it with `--extension-assembly`:
+
+```sh
+scripts/publish-bundle.sh -o /opt/kahuna/backup-gcs
+
+kahuna-server --extension-assembly /opt/kahuna/backup-gcs/Kahuna.Storage.Gcs.dll \
+              --pitr-backup-dir /var/lib/kahuna/backups \
+              --pitr-backup-target gcs \
+              --pitr-backup-scratch-dir /var/lib/kahuna/scratch \
+              --extension-option gcs.bucket=acme-kahuna-backups gcs.prefix=prod/
+```
+
+In an application that embeds `Kahuna.Core`, register the provider:
 
 ```csharp
 using Kahuna.Storage.Gcs;
 
-BackupStorageProvider provider = await GcsBackupStorage.CreateProviderAsync(
-    new GcsBackupStorageOptions { Bucket = "acme-kahuna-backups", Prefix = "prod/" },
-    logger);
+options.StorageProviders.Register(new GcsBackupStorageProvider(
+    new GcsBackupStorageOptions { Bucket = "acme-kahuna-backups", Prefix = "prod/" }));
 
-configuration.BackupTarget = GcsBackupStorage.TargetName;   // "gcs"
-configuration.BackupDir = "/var/lib/kahuna/backups";
-configuration.BackupScratchDir = "/var/lib/kahuna/scratch";
-configuration.BackupStorageProvider = provider;
+options.BackupTarget = GcsBackupStorageProvider.Name;   // "gcs"
+options.BackupDir = "/var/lib/kahuna/backups";
+options.BackupScratchDir = "/var/lib/kahuna/scratch";
 ```
 
 Before the first start, do the steps in [Installation](https://github.com/kahunakv/kahuna-gcs/blob/main/docs/installation.md).
