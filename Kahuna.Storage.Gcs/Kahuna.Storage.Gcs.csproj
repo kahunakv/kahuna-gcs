@@ -18,7 +18,7 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <PackageId>Kahuna.Storage.Gcs</PackageId>
-    <Version>1.15.0</Version>
+    <Version>1.16.3</Version>
     <Authors>Andres Gutierrez</Authors>
     <Company>Andres Gutierrez</Company>
     <Description>Google Cloud Storage backup target for Kahuna: stores point-in-time-recovery manifests and backup artifacts in a GCS bucket.</Description>
